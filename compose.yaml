@@ -1,0 +1,52 @@
+name: qwen38-nvfp4-ple
+
+services:
+  api:
+    image: ${VLLM_IMAGE:-qwen38-nvfp4-ple:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      ${MODEL_ID:-provsalt/Qwen3.8-Flash-Next-NVFP4-PLE-NVFP4}
+      --max-model-len 262144
+      --tensor-parallel-size 1
+      --trust-remote-code
+      --reasoning-parser qwen3
+      --tool-call-parser qwen3_xml
+      --enable-auto-tool-choice
+      --gpu-memory-utilization 0.5
+      --mm-encoder-tp-mode data
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+      --distributed-executor-backend mp
+    init: true
+    ipc: host
+    gpus: all
+    environment:
+      VLLM_PLE_OFFLOAD_READY_TIMEOUT: "${VLLM_PLE_OFFLOAD_READY_TIMEOUT:-900}"
+    ports:
+      - name: openai
+        target: 8000
+        published: "${PORT:-8000}"
+        host_ip: "${BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: hf-cache
+        target: /root/.cache/huggingface
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - http://127.0.0.1:8000/health
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15m
+      start_interval: 15s
+    stop_grace_period: 2m
+
+volumes:
+  hf-cache:

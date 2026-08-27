@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwen38-nvfp4-ple"
+version = "0.1.0"
+description = "NVFP4 storage and on-demand BF16 lookup for Qwen3.8-Flash-Next PLE tables in vLLM"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "Qwen3.8 NVFP4 PLE contributors" }]
+dependencies = [
+  "safetensors>=0.4.3",
+  "torch>=2.8",
+]
+
+[project.scripts]
+qwen38-nvfp4-ple = "qwen38_nvfp4_ple.cli:main"
+
+[project.entry-points."vllm.general_plugins"]
+qwen38_nvfp4_ple = "qwen38_nvfp4_ple.vllm_plugin:register"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

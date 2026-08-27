@@ -1,0 +1,17 @@
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+.git
+.env
+model
+**/*.safetensors
+**/*.gguf
+**/*.bin
+**/*.pt
+**/*.pth
+**/*.ckpt
+**/*.onnx
+build
+dist
+docs
+results
