@@ -92,7 +92,7 @@ VLLM_PLE_OFFLOAD_READY_TIMEOUT=900
 
 The Compose defaults reserve every NVIDIA GPU, use host IPC, and publish the
 API only on localhost. The command follows the Qwen3.8-27B profile with a
-262,144-token context, FP8 KV cache, Qwen reasoning and tool parsers, automatic
+262,144-token context, Qwen reasoning and tool parsers, automatic
 tool choice, data-parallel multimodal encoding, and three-token MTP. It also
 uses the `mp` executor required by PLE CPU offload.
 
@@ -111,7 +111,6 @@ docker run --rm \
   provsalt/Qwen3.8-Flash-Next-NVFP4-PLE-NVFP4 \
   --max-model-len 262144 \
   --tensor-parallel-size 1 \
-  --kv-cache-dtype fp8 \
   --trust-remote-code \
   --reasoning-parser qwen3 \
   --tool-call-parser qwen3_xml  \
