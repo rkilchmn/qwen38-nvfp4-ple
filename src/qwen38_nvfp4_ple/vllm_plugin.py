@@ -196,7 +196,7 @@ def _make_embedding_class(module: Any) -> type:
             if os.environ.get("VLLM_PLE_ZERO"):
                 # Diagnostic: zero the PLE contribution (isolates core model).
                 if output_buffer is not None:
-                    output_buffer[: query_start_loc.shape[0] + 0, :].zero_()
+                    output_buffer.zero_()
                     return output_buffer
                 result = super().forward_impl(
                     hidden_states,
