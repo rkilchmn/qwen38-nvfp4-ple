@@ -252,7 +252,7 @@ class PackedNvfp4Embedding(nn.Module):
                 _ple_dbg_line(
                     f"forward sid={sid} rows={n_rows} gscale={gscale:.9e} "
                     f"packed_sum={int(rows.view(torch.uint8).to(torch.int64).sum().item())} "
-                    f"scale_sum={float(scales.abs().sum().item())}"
+                    f"scale_sum={float(scales.to(torch.float32).abs().sum().item())}"
                 )
             out[mask] = dequantize_nvfp4(
                 rows,
