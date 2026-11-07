@@ -18,6 +18,8 @@ import json
 import mmap
 import os
 import struct
+import sys
+import time
 from typing import Dict
 
 import torch
@@ -26,6 +28,30 @@ from torch import nn
 from .format import GROUP_SIZE, dequantize_nvfp4
 
 FORMAT_NAME = "qwen38-nvfp4-ple-v1"
+
+# Debug verbosity for the PLE runtime plugin (0 = default/off):
+#   0 - no debug output
+#   1 - per-forward summary: token count, shards touched, gathered rows,
+#       global-scale source used per shard
+#   2 - + per-shard checksums of the gathered packed rows / block scales and
+#       the produced rows
+PLE_DEBUG_LEVEL = int(os.environ.get("VLLM_PLE_DEBUG_LEVEL", "0"))
+_ple_dbg_calls = 0
+
+
+def _ple_dbg(level: int) -> bool:
+    global _ple_dbg_calls
+    if PLE_DEBUG_LEVEL < level:
+        return False
+    _ple_dbg_calls += 1
+    return True
+
+
+def _ple_dbg_line(msg: str) -> None:
+    import sys
+
+    print(f"PLEDBG: {msg}", file=sys.stderr, flush=True)
+
 
 _MODEL_DIRS = (
     os.environ.get("VLLM_PLE_MODEL_DIR", ""),
@@ -191,21 +217,58 @@ class PackedNvfp4Embedding(nn.Module):
         )
         if not self.entries:
             out.zero_()
+            print(
+                f"PLEDBG: forward ids={flat.shape[0]} shape={shape} NO ENTRIES "
+                f"(zero output!)",
+                file=sys.stderr,
+                flush=True,
+            )
             return out.reshape(*shape, self.embedding_dim)
 
         shard_of_row = torch.div(flat, self.shard_size, rounding_mode="floor")
-        for sid in shard_of_row.unique().tolist():
+        dbg1 = _ple_dbg(1)
+        dbg2 = _ple_dbg(2)
+        LOG_START = time.perf_counter() if dbg1 else 0.0
+        sids = shard_of_row.unique().tolist()
+        total_rows = 0
+        for sid in sids:
             entry = self.entries.get(int(sid))
+            gscale = (
+                self.weight_scale_2[sid].item()
+                if self.weight_scale_2[sid] > 0
+                else entry.global_scale
+            )
             if entry is None:
+                if dbg1:
+                    _ple_dbg_line(f"forward sid={sid} MISSING ENTRY")
                 continue
             mask = shard_of_row == sid
+            n_rows = int(mask.sum())
+            total_rows += n_rows
             local = (flat[mask] - int(sid) * self.shard_size).clamp_(0, entry.rows - 1)
             rows = entry.packed.index_select(0, local)
             scales = entry.scales.index_select(0, local)
+            if dbg2:
+                _ple_dbg_line(
+                    f"forward sid={sid} rows={n_rows} gscale={gscale:.9e} "
+                    f"packed_sum={int(rows.view(torch.uint8).to(torch.int64).sum().item())} "
+                    f"scale_sum={float(scales.abs().sum().item())}"
+                )
             out[mask] = dequantize_nvfp4(
                 rows,
                 scales,
-                self.weight_scale_2[sid].item() if self.weight_scale_2[sid] > 0 else entry.global_scale,
+                gscale,
                 output_dtype=self.output_dtype,
+            )
+            if dbg2:
+                _ple_dbg_line(
+                    f"forward sid={sid} out_sum={float(out[mask].float().abs().sum().item()):.4f}"
+                )
+        if dbg1:
+            print(
+                f"PLEDBG: forward ids={shape} shape={shape} shards={len(sids)} "
+                f"rows={total_rows} took={(time.perf_counter() - LOG_START) * 1e3:.1f} ms",
+                file=sys.stderr,
+                flush=True,
             )
         return out.reshape(*shape, self.embedding_dim)
